@@ -1,4 +1,3 @@
-// server.js - Sora Video Watermark Remover
 const express = require('express');
 const axios = require('axios');
 const { exec } = require('child_process');
@@ -6,6 +5,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const app = express();
+
+// === CORS FIX - CHO PHÉP TẤT CẢ TÊN MIỀN ===
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+});
+// ===========================================
 
 app.use(express.json({ limit: '100mb' }));
 
@@ -16,11 +25,9 @@ app.post('/remove-watermark', async (req, res) => {
     }
 
     try {
-        // Extract video ID and construct direct URL
         const videoId = url.split('/p/')[1];
         const videoUrl = `https://sora.chatgpt.com/video/${videoId}.mp4`;
 
-        // Download video to temp
         const inputPath = path.join(os.tmpdir(), `input_${Date.now()}.mp4`);
         const outputPath = path.join(os.tmpdir(), `clean_${Date.now()}.mp4`);
         
@@ -36,7 +43,6 @@ app.post('/remove-watermark', async (req, res) => {
                 .on('error', reject);
         });
 
-        // REMOVE WATERMARK with FFmpeg (OpenAI logo bottom-right corner)
         await new Promise((resolve, reject) => {
             const cmd = `ffmpeg -i "${inputPath}" -vf "delogo=x=W-w-20:y=H-h-20:w=140:h=50" -c:a copy "${outputPath}" -y`;
             exec(cmd, (err) => {
@@ -46,7 +52,6 @@ app.post('/remove-watermark', async (req, res) => {
             });
         });
 
-        // Return clean video as base64
         const cleanBuffer = fs.readFileSync(outputPath);
         const cleanBase64 = cleanBuffer.toString('base64');
         fs.unlinkSync(outputPath);
