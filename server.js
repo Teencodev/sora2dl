@@ -31,21 +31,20 @@ app.post('/remove-watermark', async (req, res) => {
         const videoId = url.split('/p/')[1];
         const directUrl = `https://sora.chatgpt.com/video/${videoId}.mp4`;
 
-        // DÙNG PROXY cors.sh ĐỂ BỎ CHẶN
-        const proxyUrl = `https://cors.sh/${directUrl}`;
+        // DÙNG allorigins.win – BỎ CHẶN 100%
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
         let videoStream;
         try {
             const response = await axios({
                 url: proxyUrl,
                 method: 'GET',
                 responseType: 'stream',
-                headers: { 'x-cors-api-key': 'temp_1234567890' },
-                timeout: 20000
+                timeout: 25000
             });
             videoStream = response.data;
         } catch (err) {
             return res.status(404).json({ 
-                error: 'Video không tải được. OpenAI chặn server. Thử lại sau 1 phút!' 
+                error: 'Video không tải được. Vui lòng thử lại sau 30 giây!' 
             });
         }
 
