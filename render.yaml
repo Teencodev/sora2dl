@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: savesora-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    autoDeploy: true
+    preDeployCommand: |
+      apt-get update && apt-get install -y ffmpeg
