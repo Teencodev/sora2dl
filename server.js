@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '100mb' }));
 
 app.get('/', (req, res) => {
-    res.json({ status: 'API Ready' });
+    res.json({ status: 'API Ready - SaveSora VN' });
 });
 
 app.post('/remove-watermark', async (req, res) => {
@@ -31,20 +31,21 @@ app.post('/remove-watermark', async (req, res) => {
         const videoId = url.split('/p/')[1];
         const directUrl = `https://sora.chatgpt.com/video/${videoId}.mp4`;
 
-        // DÙNG allorigins.win – BỎ CHẶN 100%
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+        // DÙNG CORS-ANYWHERE – ỔN ĐỊNH NHẤT 2025
+        const proxyUrl = `https://cors-anywhere.herokuapp.com/${directUrl}`;
         let videoStream;
         try {
             const response = await axios({
                 url: proxyUrl,
                 method: 'GET',
                 responseType: 'stream',
-                timeout: 25000
+                headers: { 'Origin': 'https://sora2dl.com' },
+                timeout: 30000
             });
             videoStream = response.data;
         } catch (err) {
             return res.status(404).json({ 
-                error: 'Video không tải được. Vui lòng thử lại sau 30 giây!' 
+                error: 'Video không tải được. OpenAI chặn tạm thời. Thử lại sau 1 phút!' 
             });
         }
 
@@ -58,7 +59,6 @@ app.post('/remove-watermark', async (req, res) => {
             writer.on('error', reject);
         });
 
-        // FFmpeg
         const cmd = `ffmpeg -i "${input}" -vf "delogo=x=W-w-20:y=H-h-20:w=140:h=50" -c:a copy "${output}" -y`;
         await new Promise((resolve, reject) => {
             exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
