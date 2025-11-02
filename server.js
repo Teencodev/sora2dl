@@ -6,14 +6,19 @@ const os = require('os');
 
 const app = express();
 
-// CORS
+// === CORS FIX – CHO PHÉP TẤT CẢ (HOẶC CHỈ sora2dl.com) ===
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    res.header('Access-Control-Allow-Origin', '*'); // hoặc 'https://sora2dl.com'
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
     next();
 });
+// =================================================
 
 app.use(express.json({ limit: '100mb' }));
 
@@ -23,7 +28,7 @@ app.get('/', (req, res) => {
 
 app.post('/remove-watermark', async (req, res) => {
     const { url } = req.body;
-    if (!url || !url.includes('sora.chatgpt.com/p/')) {
+    if (!url || !url.includes('sora.chatgpt.com/p/s_')) {
         return res.status(400).json({ error: 'Invalid Sora URL' });
     }
 
@@ -31,7 +36,7 @@ app.post('/remove-watermark', async (req, res) => {
         const videoId = url.split('/p/')[1];
         const directUrl = `https://sora.chatgpt.com/video/${videoId}.mp4`;
 
-        // DÙNG CORS-ANYWHERE – ỔN ĐỊNH NHẤT 2025
+        // DÙNG CORS-ANYWHERE – BỎ CHẶN
         const proxyUrl = `https://cors-anywhere.herokuapp.com/${directUrl}`;
         let videoStream;
         try {
@@ -45,7 +50,7 @@ app.post('/remove-watermark', async (req, res) => {
             videoStream = response.data;
         } catch (err) {
             return res.status(404).json({ 
-                error: 'Video không tải được. OpenAI chặn tạm thời. Thử lại sau 1 phút!' 
+                error: 'Video không tải được. Thử lại sau 1 phút!' 
             });
         }
 
