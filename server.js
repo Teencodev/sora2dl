@@ -6,94 +6,96 @@ const os = require('os');
 
 const app = express();
 
-// === CORS FIX – CHO PHÉP TẤT CẢ (HOẶC CHỈ sora2dl.com) ===
+// CORS – Cho phép tất cả
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*'); // hoặc 'https://sora2dl.com'
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
-// =================================================
 
 app.use(express.json({ limit: '100mb' }));
 
+// Health check
 app.get('/', (req, res) => {
-    res.json({ status: 'API Ready - SaveSora VN' });
+    res.json({ status: 'SoraSave API Ready – Based on Sora-Video-Downloader' });
 });
 
-app.post('/remove-watermark', async (req, res) => {
+// API chính – Dựa trên code SoraSave
+app.post('/download', async (req, res) => {
     const { url } = req.body;
-    if (!url || !url.includes('sora.chatgpt.com/p/s_')) {
+    if (!url || !url.match(/(s_[0-9A-Za-z_-]{8,})/)) {
         return res.status(400).json({ error: 'Invalid Sora URL' });
     }
 
-    try {
-        const videoId = url.split('/p/')[1];
-        const directUrl = `https://sora.chatgpt.com/video/${videoId}.mp4`;
+    const videoCode = url.match(/(s_[0-9A-Za-z_-]{8,})/)[1];
 
-        // DÙNG CORS-ANYWHERE – BỎ CHẶN
-        const proxyUrl = `https://cors-anywhere.herokuapp.com/${directUrl}`;
-        let videoStream;
+    try {
+        // BƯỚC 1: Thử CDN SoraSave (không watermark HD)
+        let videoUrl = `https://oscdn.dyysy.com/MP4/${videoCode}.mp4`;
+        let response;
         try {
-            const response = await axios({
-                url: proxyUrl,
-                method: 'GET',
-                responseType: 'stream',
-                headers: { 'Origin': 'https://sora2dl.com' },
-                timeout: 30000
-            });
-            videoStream = response.data;
+            response = await axios.head(videoUrl, { timeout: 5000 });
+            if (response.status === 200) {
+                console.log('CDN success');
+            } else {
+                throw new Error('CDN not available');
+            }
         } catch (err) {
-            return res.status(404).json({ 
-                error: 'Video không tải được. Thử lại sau 1 phút!' 
-            });
+            // Fallback: Thử proxy SoraSave
+            videoUrl = `https://sorasave.site/sora/download.php?url=${encodeURIComponent(videoUrl)}`;
+            response = await axios.head(videoUrl, { timeout: 10000 });
+            if (response.status !== 200) {
+                // Fallback cuối: Tải từ Sora gốc (có watermark, xóa bằng FFmpeg)
+                videoUrl = `https://sora.chatgpt.com/video/${videoCode}.mp4`;
+                console.log('Fallback to Sora original');
+            }
         }
 
-        const input = `/tmp/input_${Date.now()}.mp4`;
-        const output = `/tmp/clean_${Date.now()}.mp4`;
+        // BƯỚC 2: Tải video stream
+        const inputPath = `/tmp/input_${Date.now()}.mp4`;
+        const outputPath = `/tmp/clean_${Date.now()}.mp4`;
 
-        const writer = fs.createWriteStream(input);
-        videoStream.pipe(writer);
+        const writer = fs.createWriteStream(inputPath);
+        const streamResponse = await axios({ url: videoUrl, method: 'GET', responseType: 'stream', timeout: 30000 });
+        streamResponse.data.pipe(writer);
+
         await new Promise((resolve, reject) => {
             writer.on('finish', resolve);
             writer.on('error', reject);
         });
 
-        const cmd = `ffmpeg -i "${input}" -vf "delogo=x=W-w-20:y=H-h-20:w=140:h=50" -c:a copy "${output}" -y`;
+        // BƯỚC 3: Xóa watermark bằng FFmpeg (nếu fallback)
+        const cmd = `ffmpeg -i "${inputPath}" -vf "delogo=x=W-w-20:y=H-h-20:w=140:h=50:alpha=0.8" -c:a copy "${outputPath}" -y`;
         await new Promise((resolve, reject) => {
             exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
-                fs.unlinkSync(input);
+                fs.unlinkSync(inputPath);
                 if (error || stderr.includes('Invalid data')) {
-                    if (fs.existsSync(output)) fs.unlinkSync(output);
+                    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
                     return reject(new Error('FFmpeg failed'));
                 }
                 resolve();
             });
         });
 
-        const buffer = fs.readFileSync(output);
+        // BƯỚC 4: Trả video sạch
+        const buffer = fs.readFileSync(outputPath);
         const base64 = buffer.toString('base64');
-        fs.unlinkSync(output);
+        fs.unlinkSync(outputPath);
 
         res.json({
             cleanUrl: `data:video/mp4;base64,${base64}`,
-            size: `${(buffer.length / 1024 / 1024).toFixed(1)} MB`
+            size: `${(buffer.length / 1024 / 1024).toFixed(1)} MB`,
+            filename: `${videoCode}.mp4`
         });
 
     } catch (err) {
-        res.status(500).json({ error: 'Server error: ' + err.message });
+        res.status(500).json({ error: 'Download failed: ' + err.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    exec('ffmpeg -version', (err) => {
-        console.log(err ? 'FFmpeg missing!' : 'FFmpeg OK');
-    });
+    console.log(`SoraSave API running on port ${PORT}`);
 });
