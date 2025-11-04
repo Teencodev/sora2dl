@@ -1,5 +1,5 @@
 {
-  "name": "savesora-render",
+  "name": "sora-render",
   "version": "1.0.0",
   "description": "Sora video watermark remover backend",
   "main": "server.js",
